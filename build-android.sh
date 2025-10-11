@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Android build helper for SpeedyNote (简化版)
+# SpeedyNote Android build helper
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="${SCRIPT_DIR}"
@@ -14,8 +14,8 @@ fi
 mkdir -p "${BUILD_DIR}"
 
 QT_ANDROID_CMAKE_BIN="${QT_ANDROID_CMAKE:-/opt/qt6-android-arm64/bin/qt-cmake}"
-QT_HOST_PATH_VALUE="${QT_HOST_PATH:-/opt/qt6-install}"
 QT_ANDROID_PREFIX="${QT_ANDROID_PREFIX:-/opt/qt6-android-arm64}"
+QT_HOST_PATH_VALUE="${QT_HOST_PATH:-/opt/qt6-install}"
 ANDROID_PLATFORM_VALUE="${ANDROID_PLATFORM:-android-23}"
 ANDROID_ABI_VALUE="${ANDROID_ABI:-arm64-v8a}"
 ANDROID_STL_VALUE="${ANDROID_STL:-c++_shared}"
@@ -34,13 +34,23 @@ if [[ -z "${ANDROID_NDK_ROOT:-}" ]]; then
 fi
 
 CMAKE_TOOLCHAIN_FILE="${ANDROID_NDK_ROOT}/build/cmake/android.toolchain.cmake"
+ANDROID_SYSROOT="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+DEFAULT_FIND_ROOT_PATH="${ANDROID_SYSROOT};${QT_ANDROID_PREFIX}"
+
+if [[ -n "${CMAKE_FIND_ROOT_PATH:-}" ]]; then
+    FIND_ROOT_PATH_VALUE="${CMAKE_FIND_ROOT_PATH}"
+else
+    FIND_ROOT_PATH_VALUE="${DEFAULT_FIND_ROOT_PATH}"
+fi
 
 "${QT_ANDROID_CMAKE_BIN}" \
     -S "${PROJECT_ROOT}" \
     -B "${BUILD_DIR}" \
     -DQT_HOST_PATH="${QT_HOST_PATH_VALUE}" \
-    -DCMAKE_PREFIX_PATH="${QT_ANDROID_PREFIX}" \
+    -DCMAKE_PREFIX_PATH="${QT_ANDROID_PREFIX};${QT_HOST_PATH_VALUE}" \
     -DCMAKE_TOOLCHAIN_FILE="${CMAKE_TOOLCHAIN_FILE}" \
+    -DCMAKE_FIND_ROOT_PATH="${FIND_ROOT_PATH_VALUE}" \
+    -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=BOTH \
     -DANDROID_SDK_ROOT="${ANDROID_SDK_ROOT}" \
     -DANDROID_NDK_ROOT="${ANDROID_NDK_ROOT}" \
     -DANDROID_PLATFORM="${ANDROID_PLATFORM_VALUE}" \
