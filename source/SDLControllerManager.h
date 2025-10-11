@@ -6,7 +6,17 @@
 #include <QString>
 #include <QThread>
 #include <QTimer>
+#include <QStringList>
+
+#ifndef SPEEDYNOTE_ENABLE_SDL
+#define SPEEDYNOTE_ENABLE_SDL 1
+#endif
+
+#if SPEEDYNOTE_ENABLE_SDL
 #include <SDL2/SDL.h>
+#else
+struct SDL_Joystick;
+#endif
 
 class SDLControllerManager : public QObject {
     Q_OBJECT
@@ -53,8 +63,8 @@ private:
     bool buttonDetectionMode = false; // New: Whether we're in button detection mode
 
     int lastAngle = -1;
-    QString getButtonName(Uint8 sdlButton);
-    QString getLogicalButtonName(Uint8 sdlButton); // New: Get logical button name from physical button
+    QString getButtonName(int sdlButton);
+    QString getLogicalButtonName(int sdlButton); // New: Get logical button name from physical button
 
     // New: Physical to logical button mapping
     QMap<QString, int> physicalButtonMappings; // logicalButton -> physicalSDLButton

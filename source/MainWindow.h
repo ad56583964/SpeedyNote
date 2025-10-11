@@ -40,10 +40,12 @@
 
 // Forward declarations
 class QTreeWidgetItem;
-namespace Poppler { 
-    class Document; 
+#if SPEEDYNOTE_ENABLE_POPPLER
+namespace Poppler {
+    class Document;
     class OutlineItem;
 }
+#endif
 
 // #include "HandwritingLineEdit.h"
 
@@ -415,8 +417,10 @@ private:
     void toggleOutlineSidebar();     // Toggle PDF outline sidebar
     void onOutlineItemClicked(QTreeWidgetItem *item, int column); // Handle outline item clicks
     void loadPdfOutline();           // Load PDF outline/bookmarks
+#if SPEEDYNOTE_ENABLE_POPPLER
     void addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem); // Add outline item recursively
     Poppler::Document* getPdfDocument(); // Get PDF document from current canvas
+#endif
     
     // Bookmark sidebar functionality
     void toggleBookmarksSidebar();   // Toggle bookmarks sidebar

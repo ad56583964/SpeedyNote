@@ -45,6 +45,7 @@
 
 out/
 build/
+build-android/
 dllpack/
 poppler-24.08.0/
 share/
