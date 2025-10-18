@@ -93,5 +93,5 @@ SpeedyNote supports controller input, ideal for tablet users:
 
 1. 在宿主机进入 `demo-android` 仓库并执行 `make start-container`，进入预装 Qt/NDK 的 Docker 容器。
 2. 容器内切换至 `/workspace/SpeedyNote`。
-3. 运行 `./build-android.sh`（如需清理旧构建可附加 `--clean`）。
+3. 运行 `./build-android.sh`（如需清理旧构建可附加 `--clean`）。若启用 Poppler，请额外传入 `EXTRA_CMAKE_ARGS="-DSPEEDYNOTE_ENABLE_POPPLER=ON -DSPEEDYNOTE_POPPLER_SYSROOT=/workspace/SpeedyNote/android/poppler-sysroot"`。
 4. 生成的 APK 位于 `build-android/android-build/` 目录，可通过 `docker cp` 或卷挂载带回宿主机。

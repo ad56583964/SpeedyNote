@@ -97,7 +97,56 @@ elseif (ANDROID)
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
     include_directories(${CMAKE_CURRENT_BINARY_DIR})
     if (SPEEDYNOTE_ENABLE_POPPLER)
-        find_package(Poppler REQUIRED)
+        list(APPEND CMAKE_FIND_ROOT_PATH "${SPEEDYNOTE_POPPLER_SYSROOT}")
+        set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
+        set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
+
+        set(PKG_CONFIG_USE_STATIC_LIBS ON)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(POPPLER_QT6 REQUIRED IMPORTED_TARGET poppler-qt6)
+        pkg_check_modules(POPPLER_CORE REQUIRED IMPORTED_TARGET poppler)
+        set(ANDROID_POPPLER_STATIC_LIBS
+            ${POPPLER_QT6_STATIC_LIBRARIES}
+            ${POPPLER_QT6_LIBRARIES}
+            ${POPPLER_CORE_STATIC_LIBRARIES}
+            ${POPPLER_CORE_LIBRARIES}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_STATIC_LIBS)
+
+        set(ANDROID_POPPLER_LIBRARY_DIRS
+            ${POPPLER_QT6_LIBRARY_DIRS}
+            ${POPPLER_CORE_LIBRARY_DIRS}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_LIBRARY_DIRS)
+
+        set(ANDROID_POPPLER_LINK_FLAGS
+            ${POPPLER_QT6_STATIC_LDFLAGS}
+            ${POPPLER_QT6_STATIC_LDFLAGS_OTHER}
+            ${POPPLER_QT6_LDFLAGS}
+            ${POPPLER_QT6_LDFLAGS_OTHER}
+            ${POPPLER_CORE_STATIC_LDFLAGS}
+            ${POPPLER_CORE_STATIC_LDFLAGS_OTHER}
+            ${POPPLER_CORE_LDFLAGS}
+            ${POPPLER_CORE_LDFLAGS_OTHER}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_LINK_FLAGS)
+
+        set(ANDROID_POPPLER_INCLUDE_DIRS
+            ${POPPLER_QT6_INCLUDE_DIRS}
+            ${POPPLER_CORE_INCLUDE_DIRS}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_INCLUDE_DIRS)
+
+        list(APPEND ANDROID_POPPLER_STATIC_LIBS
+            lcms2
+            png
+            jpeg
+            openjp2
+            tiff
+            z
+            freetype
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_STATIC_LIBS)
     endif()
     set(WIN_RESOURCES "")
 elseif (UNIX)
@@ -252,11 +301,10 @@ elseif (ANDROID)
     target_link_libraries(NoteApp PRIVATE
             Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network)
     if (SPEEDYNOTE_ENABLE_POPPLER)
-        if (TARGET Poppler::poppler-qt6)
-            target_link_libraries(NoteApp PRIVATE Poppler::poppler-qt6)
-        elseif (DEFINED POPPLER_LIBRARIES)
-            target_link_libraries(NoteApp PRIVATE ${POPPLER_LIBRARIES})
-        endif()
+        target_include_directories(NoteApp PRIVATE ${ANDROID_POPPLER_INCLUDE_DIRS})
+        target_link_directories(NoteApp PRIVATE ${ANDROID_POPPLER_LIBRARY_DIRS})
+        target_link_options(NoteApp PRIVATE ${ANDROID_POPPLER_LINK_FLAGS})
+        target_link_libraries(NoteApp PRIVATE ${ANDROID_POPPLER_STATIC_LIBS})
     endif()
 elseif (UNIX)
     target_link_libraries(NoteApp PRIVATE
