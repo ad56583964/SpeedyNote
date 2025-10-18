@@ -3030,10 +3030,8 @@ void MainWindow::handleDialInput(int angle) {
             int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
             currentCanvas()->loadPdfPreviewAsync(previewPage);
         }
-        }
+        lastAngle = angle;  // ✅ Store last position
     }
-
-    lastAngle = angle;  // ✅ Store last position
 }
 
 
@@ -5936,7 +5934,6 @@ void MainWindow::addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWi
     }
 }
 
-#if SPEEDYNOTE_ENABLE_POPPLER
 Poppler::Document* MainWindow::getPdfDocument() {
     InkCanvas* canvas = currentCanvas();
     if (!canvas || !canvas->isPdfLoadedFunc()) {
