@@ -12,6 +12,34 @@ set(POPPLER_PATH "C:/msys64/mingw64" CACHE PATH "Path to Poppler")
 # Go to the MSYS2 terminal to run this commands:
 # pacman -S mingw-w64-x86_64-poppler-qt6
 
+set(_speedynote_poppler_default ON)
+set(_speedynote_sdl_default ON)
+set(_speedynote_audio_default ON)
+if (ANDROID)
+    set(_speedynote_poppler_default OFF)
+    set(_speedynote_sdl_default OFF)
+    set(_speedynote_audio_default OFF)
+endif()
+
+option(SPEEDYNOTE_ENABLE_POPPLER "Enable Poppler PDF features" ${_speedynote_poppler_default})
+option(SPEEDYNOTE_ENABLE_SDL "Enable SDL-based controller features" ${_speedynote_sdl_default})
+option(SPEEDYNOTE_ENABLE_AUDIO "Enable custom audio playback" ${_speedynote_audio_default})
+
+set(SPEEDYNOTE_POPPLER_SYSROOT "" CACHE PATH "Optional: Poppler install prefix for Android cross-builds")
+
+if (ANDROID AND SPEEDYNOTE_ENABLE_POPPLER)
+    if (SPEEDYNOTE_POPPLER_SYSROOT)
+        if (NOT EXISTS "${SPEEDYNOTE_POPPLER_SYSROOT}")
+            message(WARNING "SPEEDYNOTE_POPPLER_SYSROOT='${SPEEDYNOTE_POPPLER_SYSROOT}' does not exist.")
+        else()
+            list(APPEND CMAKE_PREFIX_PATH "${SPEEDYNOTE_POPPLER_SYSROOT}")
+            list(APPEND CMAKE_FIND_ROOT_PATH "${SPEEDYNOTE_POPPLER_SYSROOT}")
+        endif()
+    else()
+        message(WARNING "SPEEDYNOTE_ENABLE_POPPLER=ON but SPEEDYNOTE_POPPLER_SYSROOT is not set. Set it to your Poppler Android install prefix.")
+    endif()
+endif()
+
 # Also, there isn't such thing called PopplerConfig.cmake. 
 #That's why I need to make a FindPoppler.cmake file
 
@@ -58,19 +86,83 @@ if (WIN32)
 
     # Find dependencies for Windows
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
-    find_package(Poppler REQUIRED)
-    find_package(SDL2 REQUIRED CONFIG)
-    unset(SDL2main CACHE)
+    if (SPEEDYNOTE_ENABLE_POPPLER)
+        find_package(Poppler REQUIRED)
+    endif()
+    if (SPEEDYNOTE_ENABLE_SDL)
+        find_package(SDL2 REQUIRED CONFIG)
+        unset(SDL2main CACHE)
+    endif()
+elseif (ANDROID)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
+    include_directories(${CMAKE_CURRENT_BINARY_DIR})
+    if (SPEEDYNOTE_ENABLE_POPPLER)
+        list(APPEND CMAKE_FIND_ROOT_PATH "${SPEEDYNOTE_POPPLER_SYSROOT}")
+        set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY BOTH)
+        set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE BOTH)
+
+        set(PKG_CONFIG_USE_STATIC_LIBS ON)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(POPPLER_QT6 REQUIRED IMPORTED_TARGET poppler-qt6)
+        pkg_check_modules(POPPLER_CORE REQUIRED IMPORTED_TARGET poppler)
+        set(ANDROID_POPPLER_STATIC_LIBS
+            ${POPPLER_QT6_STATIC_LIBRARIES}
+            ${POPPLER_QT6_LIBRARIES}
+            ${POPPLER_CORE_STATIC_LIBRARIES}
+            ${POPPLER_CORE_LIBRARIES}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_STATIC_LIBS)
+
+        set(ANDROID_POPPLER_LIBRARY_DIRS
+            ${POPPLER_QT6_LIBRARY_DIRS}
+            ${POPPLER_CORE_LIBRARY_DIRS}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_LIBRARY_DIRS)
+
+        set(ANDROID_POPPLER_LINK_FLAGS
+            ${POPPLER_QT6_STATIC_LDFLAGS}
+            ${POPPLER_QT6_STATIC_LDFLAGS_OTHER}
+            ${POPPLER_QT6_LDFLAGS}
+            ${POPPLER_QT6_LDFLAGS_OTHER}
+            ${POPPLER_CORE_STATIC_LDFLAGS}
+            ${POPPLER_CORE_STATIC_LDFLAGS_OTHER}
+            ${POPPLER_CORE_LDFLAGS}
+            ${POPPLER_CORE_LDFLAGS_OTHER}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_LINK_FLAGS)
+
+        set(ANDROID_POPPLER_INCLUDE_DIRS
+            ${POPPLER_QT6_INCLUDE_DIRS}
+            ${POPPLER_CORE_INCLUDE_DIRS}
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_INCLUDE_DIRS)
+
+        list(APPEND ANDROID_POPPLER_STATIC_LIBS
+            lcms2
+            png
+            jpeg
+            openjp2
+            tiff
+            z
+            freetype
+        )
+        list(REMOVE_DUPLICATES ANDROID_POPPLER_STATIC_LIBS)
+    endif()
+    set(WIN_RESOURCES "")
 elseif (UNIX)
     # Linux-specific configuration
     # Use system paths for Linux
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Concurrent Xml Network)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler-qt6)
 
-    # For SDL2, we use sdl2-compat which provides SDL2 compatibility
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+    if (SPEEDYNOTE_ENABLE_POPPLER OR SPEEDYNOTE_ENABLE_SDL)
+        find_package(PkgConfig REQUIRED)
+    endif()
+    if (SPEEDYNOTE_ENABLE_POPPLER)
+        pkg_check_modules(POPPLER REQUIRED IMPORTED_TARGET poppler-qt6)
+    endif()
+    if (SPEEDYNOTE_ENABLE_SDL)
+        pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+    endif()
 
     # Include current binary directory for generated files
     include_directories(${CMAKE_CURRENT_BINARY_DIR})
@@ -126,7 +218,7 @@ set(RESOURCES resources.qrc ${QMARKDOWNTEXTEDIT_RESOURCES})
 QT6_ADD_RESOURCES(QRCC_FILES ${RESOURCES})
 
 # ✅ Build target
-add_executable(${PROJECT_NAME}
+qt_add_executable(${PROJECT_NAME}
         source/Main.cpp
         source/MainWindow.cpp
         source/InkCanvas.cpp
@@ -183,31 +275,62 @@ endif ()
 # Disable Qt deprecated warnings
 add_compile_definitions(QT_NO_DEPRECATED_WARNINGS)
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+        SPEEDYNOTE_ENABLE_POPPLER=$<IF:$<BOOL:${SPEEDYNOTE_ENABLE_POPPLER}>,1,0>
+        SPEEDYNOTE_ENABLE_SDL=$<IF:$<BOOL:${SPEEDYNOTE_ENABLE_SDL}>,1,0>
+        SPEEDYNOTE_ENABLE_AUDIO=$<IF:$<BOOL:${SPEEDYNOTE_ENABLE_AUDIO}>,1,0>
+)
+
 # ✅ Link libraries - platform specific
 if (WIN32)
-    target_link_libraries(NoteApp
-            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
-            SDL2::SDL2
-            ${POPPLER_LIBRARIES}
-            dsound  # For DirectSound API
-            dxguid  # For DirectSound GUIDs
-    )
+    target_link_libraries(NoteApp PRIVATE
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network)
+    if (SPEEDYNOTE_ENABLE_SDL)
+        target_link_libraries(NoteApp PRIVATE SDL2::SDL2)
+    endif()
+    if (SPEEDYNOTE_ENABLE_POPPLER)
+        target_link_libraries(NoteApp PRIVATE ${POPPLER_LIBRARIES})
+    endif()
+    if (SPEEDYNOTE_ENABLE_AUDIO)
+        target_link_libraries(NoteApp PRIVATE
+                dsound  # For DirectSound API
+                dxguid  # For DirectSound GUIDs
+        )
+    endif()
+elseif (ANDROID)
+    target_link_libraries(NoteApp PRIVATE
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network)
+    if (SPEEDYNOTE_ENABLE_POPPLER)
+        target_include_directories(NoteApp PRIVATE ${ANDROID_POPPLER_INCLUDE_DIRS})
+        target_link_directories(NoteApp PRIVATE ${ANDROID_POPPLER_LIBRARY_DIRS})
+        target_link_options(NoteApp PRIVATE ${ANDROID_POPPLER_LINK_FLAGS})
+        target_link_libraries(NoteApp PRIVATE ${ANDROID_POPPLER_STATIC_LIBS})
+    endif()
 elseif (UNIX)
-    target_link_libraries(NoteApp
-            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network
-            PkgConfig::SDL2
-            PkgConfig::POPPLER
-            asound  # For ALSA audio
-    )
+    target_link_libraries(NoteApp PRIVATE
+            Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Concurrent Qt6::Xml Qt6::Network)
+    if (SPEEDYNOTE_ENABLE_SDL)
+        target_link_libraries(NoteApp PRIVATE PkgConfig::SDL2)
+    endif()
+    if (SPEEDYNOTE_ENABLE_POPPLER)
+        target_link_libraries(NoteApp PRIVATE PkgConfig::POPPLER)
+    endif()
+    if (SPEEDYNOTE_ENABLE_AUDIO)
+        target_link_libraries(NoteApp PRIVATE
+                asound  # For ALSA audio
+        )
+    endif()
 endif ()
 
+qt_finalize_executable(${PROJECT_NAME})
+
 # ✅ Set output name for Linux
-if (UNIX)
+if (UNIX AND NOT ANDROID)
     set_target_properties(NoteApp PROPERTIES OUTPUT_NAME NoteApp)
 endif ()
 
 # ✅ Install targets for Linux/Flatpak
-if (UNIX)
+if (UNIX AND NOT ANDROID)
     # Install the main executable
     install(TARGETS NoteApp DESTINATION bin)
 
