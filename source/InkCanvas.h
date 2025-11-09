@@ -11,7 +11,13 @@
 #include <QColor>
 #include "ToolType.h"
 #include <QImage>
+#ifndef SPEEDYNOTE_ENABLE_POPPLER
+#define SPEEDYNOTE_ENABLE_POPPLER 1
+#endif
+
+#if SPEEDYNOTE_ENABLE_POPPLER
 #include <poppler-qt6.h>
+#endif
 #include <QCache>
 #include <QTimer>
 #include <QMenu>
@@ -87,7 +93,9 @@ public:
 
     bool isPdfLoadedFunc() const;
     int getTotalPdfPages() const;
+    #if SPEEDYNOTE_ENABLE_POPPLER
     Poppler::Document* getPdfDocument() const;
+    #endif
     
     void clearPdf();
     void clearPdfNoDelete();
@@ -293,7 +301,9 @@ private:
 
     QCache<int, QPixmap> pdfCache; // Caches 5 pages of the PDF
     mutable QMutex pdfCacheMutex; // Thread safety for pdfCache
+    #if SPEEDYNOTE_ENABLE_POPPLER
     std::unique_ptr<Poppler::Document> pdfDocument;
+    #endif
     int currentPdfPage;
     bool isPdfLoaded = false;
     int totalPdfPages = 0;
@@ -381,11 +391,15 @@ private:
     bool pdfTextSelecting = false; // True when actively selecting text
     QPointF pdfSelectionStart; // Start point of text selection (logical widget coordinates)
     QPointF pdfSelectionEnd; // End point of text selection (logical widget coordinates)
+    #if SPEEDYNOTE_ENABLE_POPPLER
     QList<Poppler::TextBox*> currentPdfTextBoxes; // Text boxes for current page(s)
     QList<Poppler::TextBox*> selectedTextBoxes; // Currently selected text boxes
+    #endif
     QList<int> currentPdfTextBoxPageNumbers; // Page number for each text box (for combined canvas)
+    #if SPEEDYNOTE_ENABLE_POPPLER
     std::unique_ptr<Poppler::Page> currentPdfPageForText; // Current PDF page for text operations
     std::unique_ptr<Poppler::Page> currentPdfPageForTextSecond; // Second PDF page for combined canvas
+    #endif
     
     // PDF text selection throttling (60 FPS)
     QTimer* pdfTextSelectionTimer = nullptr; // Timer for throttling text selection updates
@@ -442,7 +456,9 @@ private:
     void updatePdfTextSelection(const QPointF &start, const QPointF &end); // Update text selection
     void handlePdfLinkClick(const QPointF &clickPoint); // Handle PDF link clicks
     void showPdfTextSelectionMenu(const QPoint &position); // Show context menu for PDF text selection
+    #if SPEEDYNOTE_ENABLE_POPPLER
     QList<Poppler::TextBox*> getTextBoxesInSelection(const QPointF &start, const QPointF &end); // Get text boxes in selection area
+    #endif
     
     // Intelligent PDF cache helper methods
     void renderPdfPageToCache(int pageNumber); // Render a single page and add to cache

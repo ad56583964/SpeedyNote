@@ -3,6 +3,10 @@
 
 #include <QString>
 
+#ifndef SPEEDYNOTE_ENABLE_AUDIO
+#define SPEEDYNOTE_ENABLE_AUDIO 1
+#endif
+
 /**
  * Simple, lightweight cross-platform audio playback for WAV files
  * Replaces Qt6 Multimedia to reduce dependencies and load time

@@ -3,6 +3,10 @@
 #include "ButtonMappingTypes.h"
 #include "SDLControllerManager.h"
 
+#ifndef SPEEDYNOTE_ENABLE_SDL
+#define SPEEDYNOTE_ENABLE_SDL 1
+#endif
+
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -569,6 +573,7 @@ void ControlPanelDialog::removeKeyboardMapping() {
 }
 
 void ControlPanelDialog::createControllerMappingTab() {
+    #if SPEEDYNOTE_ENABLE_SDL
     controllerMappingTab = new QWidget(this);
     QVBoxLayout *layout = new QVBoxLayout(controllerMappingTab);
     
@@ -609,9 +614,19 @@ void ControlPanelDialog::createControllerMappingTab() {
     layout->addStretch();
     
     tabWidget->addTab(controllerMappingTab, tr("Controller Mapping"));
+    #else
+    controllerMappingTab = new QWidget(this);
+    QVBoxLayout *layout = new QVBoxLayout(controllerMappingTab);
+    QLabel *infoLabel = new QLabel(tr("Controller mapping is not available on this platform."), controllerMappingTab);
+    infoLabel->setWordWrap(true);
+    layout->addWidget(infoLabel);
+    layout->addStretch();
+    tabWidget->addTab(controllerMappingTab, tr("Controller Mapping"));
+    #endif
 }
 
 void ControlPanelDialog::openControllerMapping() {
+    #if SPEEDYNOTE_ENABLE_SDL
     if (!mainWindowRef) {
         QMessageBox::warning(this, tr("Error"), tr("MainWindow reference not available."));
         return;
@@ -632,9 +647,14 @@ void ControlPanelDialog::openControllerMapping() {
     
     ControllerMappingDialog dialog(controllerManager, this);
     dialog.exec();
+    #else
+    QMessageBox::information(this, tr("Controller Unsupported"),
+                             tr("Controller mapping is not available on this platform."));
+    #endif
 }
 
 void ControlPanelDialog::reconnectController() {
+    #if SPEEDYNOTE_ENABLE_SDL
     if (!mainWindowRef) {
         QMessageBox::warning(this, tr("Error"), tr("MainWindow reference not available."));
         return;
@@ -671,9 +691,14 @@ void ControlPanelDialog::reconnectController() {
         QMessageBox::warning(this, tr("Reconnection Failed"), 
             tr("Failed to reconnect controller. Please ensure your controller is powered on and in pairing mode, then try again."));
     }
+    #else
+    QMessageBox::information(this, tr("Controller Unsupported"),
+                             tr("Controller reconnect is not available on this platform."));
+    #endif
 }
 
 void ControlPanelDialog::updateControllerStatus() {
+    #if SPEEDYNOTE_ENABLE_SDL
     if (!mainWindowRef || !controllerStatusLabel) return;
     
     SDLControllerManager *controllerManager = mainWindowRef->getControllerManager();
@@ -690,6 +715,11 @@ void ControlPanelDialog::updateControllerStatus() {
         controllerStatusLabel->setText(tr("✗ No controller detected"));
         controllerStatusLabel->setStyleSheet("color: red; font-weight: bold;");
     }
+    #else
+    if (!controllerStatusLabel) return;
+    controllerStatusLabel->setText(tr("Controller support unavailable"));
+    controllerStatusLabel->setStyleSheet("color: gray;");
+    #endif
 }
 
 void ControlPanelDialog::createAboutTab() {

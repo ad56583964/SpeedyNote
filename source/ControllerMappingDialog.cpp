@@ -2,6 +2,12 @@
 #include "SDLControllerManager.h"
 #include <QApplication>
 
+#ifndef SPEEDYNOTE_ENABLE_SDL
+#define SPEEDYNOTE_ENABLE_SDL 1
+#endif
+
+#if SPEEDYNOTE_ENABLE_SDL
+
 ControllerMappingDialog::ControllerMappingDialog(SDLControllerManager *controllerManager, QWidget *parent)
     : QDialog(parent), controller(controllerManager) {
     
@@ -272,3 +278,43 @@ bool ControllerMappingDialog::isDarkMode() const {
     QColor bg = palette().color(QPalette::Window);
     return bg.lightness() < 128;  // Lightness scale: 0 (black) - 255 (white)
 } 
+
+#else  // SPEEDYNOTE_ENABLE_SDL
+
+ControllerMappingDialog::ControllerMappingDialog(SDLControllerManager *controllerManager, QWidget *parent)
+    : QDialog(parent), controller(controllerManager) {
+    setWindowTitle(tr("Controller Mapping Unavailable"));
+    setModal(true);
+
+    QVBoxLayout *layout = new QVBoxLayout(this);
+    QLabel *label = new QLabel(tr("Controller support is not available on this platform."), this);
+    label->setWordWrap(true);
+    layout->addWidget(label);
+
+    QPushButton *closeButton = new QPushButton(tr("Close"), this);
+    connect(closeButton, &QPushButton::clicked, this, &QDialog::accept);
+    layout->addWidget(closeButton);
+
+    mappingTimeoutTimer = nullptr;
+}
+
+void ControllerMappingDialog::startButtonMapping(const QString &) {}
+void ControllerMappingDialog::onRawButtonPressed(int, const QString &) {}
+void ControllerMappingDialog::resetToDefaults() {}
+void ControllerMappingDialog::applyMappings() { accept(); }
+
+void ControllerMappingDialog::setupUI() {}
+
+QMap<QString, QString> ControllerMappingDialog::getLogicalButtonDescriptions() const {
+    return {};
+}
+
+void ControllerMappingDialog::loadCurrentMappings() {}
+
+void ControllerMappingDialog::updateMappingDisplay() {}
+
+bool ControllerMappingDialog::isDarkMode() const {
+    return false;
+}
+
+#endif // SPEEDYNOTE_ENABLE_SDL

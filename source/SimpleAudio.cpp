@@ -4,12 +4,14 @@
 #include <cmath>
 #include <algorithm>
 
+#if SPEEDYNOTE_ENABLE_AUDIO
+
 #ifdef _WIN32
     #include <windows.h>
     #include <dsound.h>
     #pragma comment(lib, "dsound.lib")
     #pragma comment(lib, "dxguid.lib")
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(__ANDROID__)
     #include <alsa/asoundlib.h>
     #include <QThread>
     #include <QMutex>
@@ -470,7 +472,7 @@ bool SimpleAudio::isAudioAvailable()
 {
 #ifdef _WIN32
     return true; // Windows always has PlaySound
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(__ANDROID__)
     // Check if ALSA is available
     snd_pcm_t* pcm_handle;
     int err = snd_pcm_open(&pcm_handle, "default", SND_PCM_STREAM_PLAYBACK, SND_PCM_NONBLOCK);
@@ -483,3 +485,47 @@ bool SimpleAudio::isAudioAvailable()
     return false;
 #endif
 }
+
+#else // SPEEDYNOTE_ENABLE_AUDIO
+
+class SimpleAudio::SimpleAudioPrivate
+{
+public:
+    float volume = 0.8f;
+    int minimumInterval = 50;
+};
+
+SimpleAudio::SimpleAudio() : d(new SimpleAudioPrivate()) {}
+
+SimpleAudio::~SimpleAudio()
+{
+    delete d;
+}
+
+bool SimpleAudio::loadWavFile(const QString &)
+{
+    return false;
+}
+
+void SimpleAudio::play() {}
+
+void SimpleAudio::setVolume(float volume)
+{
+    if (d) {
+        d->volume = qBound(0.0f, volume, 1.0f);
+    }
+}
+
+void SimpleAudio::setMinimumInterval(int milliseconds)
+{
+    if (d) {
+        d->minimumInterval = qBound(10, milliseconds, 1000);
+    }
+}
+
+bool SimpleAudio::isAudioAvailable()
+{
+    return false;
+}
+
+#endif // SPEEDYNOTE_ENABLE_AUDIO

@@ -1,7 +1,14 @@
 #include "SDLControllerManager.h"
-#include <QtMath>
+
 #include <QDebug>
 #include <QSettings>
+#include <QStringList>
+
+#if SPEEDYNOTE_ENABLE_SDL
+#include <QtMath>
+#endif
+
+#if SPEEDYNOTE_ENABLE_SDL
 
 SDLControllerManager::SDLControllerManager(QObject *parent)
     : QObject(parent), pollTimer(new QTimer(this)) {
@@ -106,12 +113,12 @@ SDLControllerManager::SDLControllerManager(QObject *parent)
     });
 }
 
-QString SDLControllerManager::getButtonName(Uint8 sdlButton) {
+QString SDLControllerManager::getButtonName(int sdlButton) {
     // This method is now deprecated in favor of getLogicalButtonName
     return getLogicalButtonName(sdlButton);
 }
 
-QString SDLControllerManager::getLogicalButtonName(Uint8 sdlButton) {
+QString SDLControllerManager::getLogicalButtonName(int sdlButton) {
     // Find which logical button this physical button is mapped to
     for (auto it = physicalButtonMappings.begin(); it != physicalButtonMappings.end(); ++it) {
         if (it.value() == sdlButton) {
@@ -150,64 +157,6 @@ int SDLControllerManager::getJoystickButtonCount() const {
     return 0;
 }
 
-void SDLControllerManager::setPhysicalButtonMapping(const QString &logicalButton, int physicalSDLButton) {
-    physicalButtonMappings[logicalButton] = physicalSDLButton;
-    saveControllerMappings();
-}
-
-int SDLControllerManager::getPhysicalButtonMapping(const QString &logicalButton) const {
-    return physicalButtonMappings.value(logicalButton, -1);
-}
-
-QMap<QString, int> SDLControllerManager::getAllPhysicalMappings() const {
-    return physicalButtonMappings;
-}
-
-QMap<QString, int> SDLControllerManager::getDefaultMappings() const {
-    // Default mappings for Joy-Con L using raw button indices
-    // These will need to be adjusted based on actual Joy-Con button indices
-    QMap<QString, int> defaults;
-    defaults["LEFTSHOULDER"] = 4;    // L button
-    defaults["RIGHTSHOULDER"] = 6;   // ZL button  
-    defaults["PADDLE2"] = 14;        // SL button
-    defaults["PADDLE4"] = 15;        // SR button
-    defaults["Y"] = 0;               // Up arrow
-    defaults["A"] = 1;               // Down arrow
-    defaults["B"] = 2;               // Left arrow
-    defaults["X"] = 3;               // Right arrow
-    defaults["LEFTSTICK"] = 10;      // Stick press
-    defaults["START"] = 8;           // Minus button
-    defaults["GUIDE"] = 13;          // Screenshot button
-    return defaults;
-}
-
-void SDLControllerManager::saveControllerMappings() {
-    QSettings settings("SpeedyNote", "App");
-    settings.beginGroup("ControllerPhysicalMappings");
-    for (auto it = physicalButtonMappings.begin(); it != physicalButtonMappings.end(); ++it) {
-        settings.setValue(it.key(), it.value());
-    }
-    settings.endGroup();
-}
-
-void SDLControllerManager::loadControllerMappings() {
-    QSettings settings("SpeedyNote", "App");
-    settings.beginGroup("ControllerPhysicalMappings");
-    QStringList keys = settings.allKeys();
-    
-    if (keys.isEmpty()) {
-        // No saved mappings, use defaults
-        physicalButtonMappings = getDefaultMappings();
-        saveControllerMappings(); // Save defaults for next time
-    } else {
-        // Load saved mappings
-        for (const QString &key : keys) {
-            physicalButtonMappings[key] = settings.value(key).toInt();
-        }
-    }
-    settings.endGroup();
-}
-
 void SDLControllerManager::startButtonDetection() {
     buttonDetectionMode = true;
 }
@@ -234,18 +183,12 @@ void SDLControllerManager::start() {
 
     // Look for any available joystick
     int numJoysticks = SDL_NumJoysticks();
-    // qDebug() << "Found" << numJoysticks << "joystick(s)";
     
     for (int i = 0; i < numJoysticks; ++i) {
         const char* joystickName = SDL_JoystickNameForIndex(i);
-        // qDebug() << "Joystick" << i << ":" << (joystickName ? joystickName : "Unknown");
         
         joystick = SDL_JoystickOpen(i);
         if (joystick) {
-            // qDebug() << "Joystick connected!";
-            // qDebug() << "Number of buttons:" << SDL_JoystickNumButtons(joystick);
-            // qDebug() << "Number of axes:" << SDL_JoystickNumAxes(joystick);
-            // qDebug() << "Number of hats:" << SDL_JoystickNumHats(joystick);
             break;
         }
     }
@@ -254,7 +197,7 @@ void SDLControllerManager::start() {
         qWarning() << "No joystick could be opened";
     }
 
-    pollTimer->start(16); // 60 FPS polling
+    pollTimer->start(POLL_INTERVAL);
 }
 
 void SDLControllerManager::stop() {
@@ -291,18 +234,13 @@ void SDLControllerManager::reconnect() {
     
     // Look for any available joystick
     int numJoysticks = SDL_NumJoysticks();
-    qDebug() << "Reconnect: Found" << numJoysticks << "joystick(s)";
     
     for (int i = 0; i < numJoysticks; ++i) {
         const char* joystickName = SDL_JoystickNameForIndex(i);
-        qDebug() << "Reconnect: Trying joystick" << i << ":" << (joystickName ? joystickName : "Unknown");
+        Q_UNUSED(joystickName);
         
         joystick = SDL_JoystickOpen(i);
         if (joystick) {
-            qDebug() << "Reconnect: Joystick connected successfully!";
-            qDebug() << "Number of buttons:" << SDL_JoystickNumButtons(joystick);
-            qDebug() << "Number of axes:" << SDL_JoystickNumAxes(joystick);
-            qDebug() << "Number of hats:" << SDL_JoystickNumHats(joystick);
             break;
         }
     }
@@ -312,5 +250,107 @@ void SDLControllerManager::reconnect() {
     }
     
     // Restart polling
-    pollTimer->start(16); // 60 FPS polling
+    pollTimer->start(POLL_INTERVAL);
+}
+
+#else // SPEEDYNOTE_ENABLE_SDL
+
+SDLControllerManager::SDLControllerManager(QObject *parent)
+    : QObject(parent), pollTimer(new QTimer(this)) {
+    loadControllerMappings();
+}
+
+SDLControllerManager::~SDLControllerManager() = default;
+
+QString SDLControllerManager::getButtonName(int) {
+    return QString();
+}
+
+QString SDLControllerManager::getLogicalButtonName(int) {
+    return QString();
+}
+
+QString SDLControllerManager::getPhysicalButtonName(int sdlButton) const {
+    Q_UNUSED(sdlButton);
+    return QString();
+}
+
+QStringList SDLControllerManager::getAvailablePhysicalButtons() const {
+    return {};
+}
+
+int SDLControllerManager::getJoystickButtonCount() const {
+    return 0;
+}
+
+void SDLControllerManager::startButtonDetection() {
+    buttonDetectionMode = true;
+}
+
+void SDLControllerManager::stopButtonDetection() {
+    buttonDetectionMode = false;
+}
+
+void SDLControllerManager::start() {}
+
+void SDLControllerManager::stop() {
+    pollTimer->stop();
+}
+
+void SDLControllerManager::reconnect() {}
+
+#endif // SPEEDYNOTE_ENABLE_SDL
+
+void SDLControllerManager::setPhysicalButtonMapping(const QString &logicalButton, int physicalSDLButton) {
+    physicalButtonMappings[logicalButton] = physicalSDLButton;
+    saveControllerMappings();
+}
+
+int SDLControllerManager::getPhysicalButtonMapping(const QString &logicalButton) const {
+    return physicalButtonMappings.value(logicalButton, -1);
+}
+
+QMap<QString, int> SDLControllerManager::getAllPhysicalMappings() const {
+    return physicalButtonMappings;
+}
+
+QMap<QString, int> SDLControllerManager::getDefaultMappings() const {
+    QMap<QString, int> defaults;
+    defaults["LEFTSHOULDER"] = 4;
+    defaults["RIGHTSHOULDER"] = 6;
+    defaults["PADDLE2"] = 14;
+    defaults["PADDLE4"] = 15;
+    defaults["Y"] = 0;
+    defaults["A"] = 1;
+    defaults["B"] = 2;
+    defaults["X"] = 3;
+    defaults["LEFTSTICK"] = 10;
+    defaults["START"] = 8;
+    defaults["GUIDE"] = 13;
+    return defaults;
+}
+
+void SDLControllerManager::saveControllerMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("ControllerPhysicalMappings");
+    for (auto it = physicalButtonMappings.begin(); it != physicalButtonMappings.end(); ++it) {
+        settings.setValue(it.key(), it.value());
+    }
+    settings.endGroup();
+}
+
+void SDLControllerManager::loadControllerMappings() {
+    QSettings settings("SpeedyNote", "App");
+    settings.beginGroup("ControllerPhysicalMappings");
+    QStringList keys = settings.allKeys();
+
+    if (keys.isEmpty()) {
+        physicalButtonMappings = getDefaultMappings();
+        saveControllerMappings();
+    } else {
+        for (const QString &key : keys) {
+            physicalButtonMappings[key] = settings.value(key).toInt();
+        }
+    }
+    settings.endGroup();
 }

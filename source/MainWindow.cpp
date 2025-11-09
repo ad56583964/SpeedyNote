@@ -40,7 +40,9 @@
 #include "SDLControllerManager.h"
 #include "LauncherWindow.h" // Added for launcher access
 #include "PdfOpenDialog.h" // Added for PDF file association
+#if SPEEDYNOTE_ENABLE_POPPLER
 #include <poppler-qt6.h> // For PDF outline parsing
+#endif
 #include <memory> // For std::shared_ptr
 
 // Linux-specific includes for signal handling
@@ -128,10 +130,12 @@ MainWindow::MainWindow(QWidget *parent)
     
     setupUi();    // ✅ Move all UI setup here
 
+    #if SPEEDYNOTE_ENABLE_SDL
     controllerManager = new SDLControllerManager();
     controllerThread = new QThread(this);
 
     controllerManager->moveToThread(controllerThread);
+    #endif
     
     // ✅ Initialize mouse dial control system
     mouseDialTimer = new QTimer(this);
@@ -142,10 +146,12 @@ MainWindow::MainWindow(QWidget *parent)
             startMouseDialMode(mouseButtonCombinationToString(pressedMouseButtons));
         }
     });
+    #if SPEEDYNOTE_ENABLE_SDL
     connect(controllerThread, &QThread::started, controllerManager, &SDLControllerManager::start);
     connect(controllerThread, &QThread::finished, controllerManager, &SDLControllerManager::deleteLater);
 
     controllerThread->start();
+    #endif
 
     
     updateZoom(); // ✅ Keep this for initial zoom adjustment
@@ -218,6 +224,12 @@ void MainWindow::setupUi() {
     clearPdfButton->setStyleSheet(buttonStyle);
     loadPdfButton->setToolTip(tr("Manage PDF"));
     clearPdfButton->setToolTip(tr("Clear PDF"));
+#if !SPEEDYNOTE_ENABLE_POPPLER
+    loadPdfButton->setEnabled(false);
+    clearPdfButton->setEnabled(false);
+    loadPdfButton->setToolTip(tr("PDF 功能在当前平台不可用"));
+    clearPdfButton->setToolTip(tr("PDF 功能在当前平台不可用"));
+#endif
     clearPdfButton->setVisible(false); // ✅ Hide clearPdfButton to save space
     connect(loadPdfButton, &QPushButton::clicked, this, &MainWindow::handleSmartPdfButton);
     connect(clearPdfButton, &QPushButton::clicked, this, &MainWindow::clearPdf);
@@ -2811,6 +2823,7 @@ void MainWindow::toggleDial() {
     }
     updateDialDisplay(); // ✅ Ensure it's updated before showing
 
+    #if SPEEDYNOTE_ENABLE_SDL
     if (controllerManager) {
         connect(controllerManager, &SDLControllerManager::buttonHeld, this, &MainWindow::handleButtonHeld);
         connect(controllerManager, &SDLControllerManager::buttonReleased, this, &MainWindow::handleButtonReleased);
@@ -2818,6 +2831,7 @@ void MainWindow::toggleDial() {
         connect(controllerManager, &SDLControllerManager::leftStickReleased, pageDial, &QDial::sliderReleased);
         connect(controllerManager, &SDLControllerManager::buttonSinglePress, this, &MainWindow::handleControllerButton);
     }
+    #endif
 
     loadButtonMappings();  // ✅ Load button mappings for the controller
     loadMouseDialMappings(); // ✅ Load mouse dial mappings
@@ -2988,34 +3002,36 @@ void MainWindow::handleDialInput(int angle) {
     int previousClicks = (accumulatedRotation - delta) / 45; // Previous click count
 
     if (currentClicks != previousClicks) {  // ✅ Play sound if a new boundary is crossed
-        
+
+        #if SPEEDYNOTE_ENABLE_AUDIO
         if (dialClickSound) {
             dialClickSound->play();
-    
-            // ✅ Vibrate controller
+        }
+        #endif
+
+        #if SPEEDYNOTE_ENABLE_SDL
+        if (controllerManager) {
             SDL_Joystick *joystick = controllerManager->getJoystick();
             if (joystick) {
-                // Note: SDL_JoystickRumble requires SDL 2.0.9+
-                // For older versions, this will be a no-op
                 #if SDL_VERSION_ATLEAST(2, 0, 9)
                 SDL_JoystickRumble(joystick, 0xA000, 0xF000, 10);  // Vibrate shortly
                 #endif
             }
-    
-            grossTotalClicks += 1;
-            tempClicks = currentClicks;
-            updateDialDisplay();
-    
-            // Only load PDF previews for page-switching dial modes
-            if (isLowResPreviewEnabled() && 
-                (currentDialMode == PageSwitching || currentDialMode == PanAndPageScroll)) {
-                int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
-                currentCanvas()->loadPdfPreviewAsync(previewPage);
-            }
         }
-    }
+        #endif
 
-    lastAngle = angle;  // ✅ Store last position
+        grossTotalClicks += 1;
+        tempClicks = currentClicks;
+        updateDialDisplay();
+
+        // Only load PDF previews for page-switching dial modes
+        if (isLowResPreviewEnabled() && 
+            (currentDialMode == PageSwitching || currentDialMode == PanAndPageScroll)) {
+            int previewPage = qBound(1, getCurrentPageForCanvas(currentCanvas()) + currentClicks, 99999);
+            currentCanvas()->loadPdfPreviewAsync(previewPage);
+        }
+        lastAngle = angle;  // ✅ Store last position
+    }
 }
 
 
@@ -3079,17 +3095,22 @@ void MainWindow::handleToolSelection(int angle) {
         lastToolIndex = toolIndex;  // ✅ Update last selected tool
 
         // ✅ Play click sound when tool changes
+        #if SPEEDYNOTE_ENABLE_AUDIO
         if (dialClickSound) {
             dialClickSound->play();
         }
+        #endif
 
-        SDL_Joystick *joystick = controllerManager->getJoystick();
-
-        if (joystick) {
-            #if SDL_VERSION_ATLEAST(2, 0, 9)
-            SDL_JoystickRumble(joystick, 0xA000, 0xF000, 20);  // ✅ Vibrate controller
-            #endif
+        #if SPEEDYNOTE_ENABLE_SDL
+        if (controllerManager) {
+            SDL_Joystick *joystick = controllerManager->getJoystick();
+            if (joystick) {
+                #if SDL_VERSION_ATLEAST(2, 0, 9)
+                SDL_JoystickRumble(joystick, 0xA000, 0xF000, 20);  // ✅ Vibrate controller
+                #endif
+            }
         }
+        #endif
 
         updateToolButtonStates();  // ✅ Update tool button states
         updateDialDisplay();  // ✅ Update dial display]
@@ -3311,6 +3332,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event) {
 
 
 void MainWindow::initializeDialSound() {
+    #if SPEEDYNOTE_ENABLE_AUDIO
     if (!dialClickSound) {
         dialClickSound = new SimpleAudio();
         if (!dialClickSound->loadWavFile(":/resources/sounds/dial_click.wav")) {
@@ -3319,6 +3341,9 @@ void MainWindow::initializeDialSound() {
         dialClickSound->setVolume(0.8);  // ✅ Set volume (0.0 - 1.0)
         dialClickSound->setMinimumInterval(5); // ✅ DirectSound can handle much faster rates (5ms minimum)
     }
+    #else
+    Q_UNUSED(dialClickSound);
+    #endif
 }
 
 void MainWindow::changeDialMode(DialMode mode) {
@@ -3485,12 +3510,16 @@ void MainWindow::onPanScrollReleased() {
         pageInput->setValue(newPage);
         updateDialDisplay();
 
-        SDL_Joystick *joystick = controllerManager->getJoystick();
-        if (joystick) {
-            #if SDL_VERSION_ATLEAST(2, 0, 9)
-            SDL_JoystickRumble(joystick, 0xA000, 0xF000, 25);  // Vibrate shortly
-            #endif
+        #if SPEEDYNOTE_ENABLE_SDL
+        if (controllerManager) {
+            SDL_Joystick *joystick = controllerManager->getJoystick();
+            if (joystick) {
+                #if SDL_VERSION_ATLEAST(2, 0, 9)
+                SDL_JoystickRumble(joystick, 0xA000, 0xF000, 25);  // Vibrate shortly
+                #endif
+            }
         }
+        #endif
     }
 
     // Reset states
@@ -3544,13 +3573,19 @@ void MainWindow::handlePresetSelection(int angle) {
         updateDialDisplay();
         updateColorButtonStates();  // Update button states when preset is selected
         
+        #if SPEEDYNOTE_ENABLE_AUDIO
         if (dialClickSound) dialClickSound->play();  // ✅ Provide feedback
-        SDL_Joystick *joystick = controllerManager->getJoystick();
+        #endif
+        #if SPEEDYNOTE_ENABLE_SDL
+        if (controllerManager) {
+            SDL_Joystick *joystick = controllerManager->getJoystick();
             if (joystick) {
                 #if SDL_VERSION_ATLEAST(2, 0, 9)
                 SDL_JoystickRumble(joystick, 0xA000, 0xF000, 25);  // Vibrate shortly
                 #endif
             }
+        }
+        #endif
     }
 }
 
@@ -5828,6 +5863,7 @@ void MainWindow::onOutlineItemClicked(QTreeWidgetItem *item, int column) {
 }
 
 void MainWindow::loadPdfOutline() {
+#if SPEEDYNOTE_ENABLE_POPPLER
     if (!outlineTree) return;
     
     outlineTree->clear();
@@ -5856,8 +5892,14 @@ void MainWindow::loadPdfOutline() {
     
     // Expand the first level by default
     outlineTree->expandToDepth(0);
+#else
+    if (outlineTree) {
+        outlineTree->clear();
+    }
+#endif
 }
 
+#if SPEEDYNOTE_ENABLE_POPPLER
 void MainWindow::addOutlineItem(const Poppler::OutlineItem& outlineItem, QTreeWidgetItem* parentItem) {
     if (outlineItem.isNull()) return;
     
@@ -5899,6 +5941,7 @@ Poppler::Document* MainWindow::getPdfDocument() {
     }
     return canvas->getPdfDocument();
 }
+#endif
 
 void MainWindow::loadDefaultBackgroundSettings(BackgroundStyle &style, QColor &color, int &density) {
     QSettings settings("SpeedyNote", "App");
@@ -6279,6 +6322,7 @@ QColor MainWindow::getPaletteColor(const QString &colorName) {
 }
 
 void MainWindow::reconnectControllerSignals() {
+    #if SPEEDYNOTE_ENABLE_SDL
     if (!controllerManager || !pageDial) {
         return;
     }
@@ -6312,6 +6356,9 @@ void MainWindow::reconnectControllerSignals() {
     updateDialDisplay();
     
     // qDebug() << "Controller signals reconnected successfully";
+    #else
+    // Controller support disabled on this platform.
+    #endif
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {

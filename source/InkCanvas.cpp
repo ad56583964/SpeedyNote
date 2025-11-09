@@ -130,10 +130,12 @@ InkCanvas::~InkCanvas() {
     }
     
     // ✅ Cleanup PDF resources
+#if SPEEDYNOTE_ENABLE_POPPLER
     if (pdfDocument) {
         pdfDocument.reset();
         pdfDocument = nullptr;
     }
+#endif
     
     // ✅ Clear caches to free memory
     {
@@ -177,10 +179,12 @@ InkCanvas::~InkCanvas() {
     }
     activeNoteWatchers.clear();
     
+    #if SPEEDYNOTE_ENABLE_POPPLER
     // ✅ Clear PDF text boxes - CRITICAL: Clear selectedTextBoxes first to prevent crashes
     selectedTextBoxes.clear();  // Must clear before deleting currentPdfTextBoxes
     qDeleteAll(currentPdfTextBoxes);
     currentPdfTextBoxes.clear();
+    #endif
     
     // ✅ Explicitly clean up window managers to prevent memory leaks
     if (markdownManager) {
@@ -216,18 +220,19 @@ void InkCanvas::initializeBuffer() {
 }
 
 void InkCanvas::loadPdf(const QString &pdfPath) {
+#if SPEEDYNOTE_ENABLE_POPPLER
     // ✅ Clear existing PDF cache before loading new PDF to prevent old pages from showing
     {
         QMutexLocker locker(&pdfCacheMutex);
         pdfCache.clear();
     }
     currentCachedPage = -1;
-    
+
     // Cancel any active PDF caching operations
     if (pdfCacheTimer && pdfCacheTimer->isActive()) {
         pdfCacheTimer->stop();
     }
-    
+
     // Cancel and clean up any active PDF watchers from previous PDF
     for (QFutureWatcher<void>* watcher : activePdfWatchers) {
         if (watcher && !watcher->isFinished()) {
@@ -236,7 +241,7 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
         watcher->deleteLater();
     }
     activePdfWatchers.clear();
-    
+
     pdfDocument = Poppler::Document::load(pdfPath);
     if (pdfDocument && !pdfDocument->isLocked()) {
         // Enable anti-aliasing rendering hints for better text quality
@@ -244,27 +249,49 @@ void InkCanvas::loadPdf(const QString &pdfPath) {
         pdfDocument->setRenderHint(Poppler::Document::TextAntialiasing, true);
         pdfDocument->setRenderHint(Poppler::Document::TextHinting, true);
         pdfDocument->setRenderHint(Poppler::Document::TextSlightHinting, true);
-        
+
         totalPdfPages = pdfDocument->numPages();
         isPdfLoaded = true;
         totalPdfPages = pdfDocument->numPages();
-        // ✅ Don't automatically load page 0 - let MainWindow handle initial page loading
-        
-        // ✅ Save the PDF path in the unified JSON metadata
+
         if (!saveFolder.isEmpty()) {
-            this->pdfPath = pdfPath; // Store in member variable
-            saveNotebookMetadata(); // Save to JSON
+            this->pdfPath = pdfPath;
+            saveNotebookMetadata();
         }
-        
-        // Emit signal that PDF was loaded
+
         emit pdfLoaded();
-        // update();
     }
+#else
+    Q_UNUSED(pdfPath);
+    {
+        QMutexLocker locker(&pdfCacheMutex);
+        pdfCache.clear();
+    }
+    currentCachedPage = -1;
+    if (pdfCacheTimer && pdfCacheTimer->isActive()) {
+        pdfCacheTimer->stop();
+    }
+    for (QFutureWatcher<void>* watcher : activePdfWatchers) {
+        if (watcher && !watcher->isFinished()) {
+            watcher->cancel();
+        }
+        watcher->deleteLater();
+    }
+    activePdfWatchers.clear();
+    isPdfLoaded = false;
+    totalPdfPages = 0;
+    if (!saveFolder.isEmpty()) {
+        this->pdfPath.clear();
+        saveNotebookMetadata();
+    }
+#endif
 }
 
 void InkCanvas::clearPdf() {
+#if SPEEDYNOTE_ENABLE_POPPLER
     pdfDocument.reset();
     pdfDocument = nullptr;
+#endif
     isPdfLoaded = false;
     totalPdfPages = 0;
     {
@@ -298,8 +325,10 @@ void InkCanvas::clearPdf() {
 }
 
 void InkCanvas::clearPdfNoDelete() {
+#if SPEEDYNOTE_ENABLE_POPPLER
     pdfDocument.reset();
     pdfDocument = nullptr;
+#endif
     isPdfLoaded = false;
     totalPdfPages = 0;
     {
@@ -324,55 +353,54 @@ void InkCanvas::clearPdfNoDelete() {
 }
 
 void InkCanvas::loadPdfPage(int pageNumber) {
+#if SPEEDYNOTE_ENABLE_POPPLER
     if (!pdfDocument) return;
 
-    // Update current page tracker
     currentCachedPage = pageNumber;
 
-    // Check if target page is already cached (thread-safe)
     bool isCached = false;
     {
         QMutexLocker locker(&pdfCacheMutex);
         if (pdfCache.contains(pageNumber)) {
-            // Display the cached page immediately
             backgroundImage = *pdfCache.object(pageNumber);
             isCached = true;
         }
     }
-    
+
     if (isCached) {
-        loadPage(pageNumber);  // Load annotations
-        loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
+        loadPage(pageNumber);
+        loadPdfTextBoxes(pageNumber);
         update();
-        
-        // Check and cache adjacent pages after delay
         checkAndCacheAdjacentPages(pageNumber);
         return;
     }
 
-    // Target page not in cache - render it immediately
     renderPdfPageToCache(pageNumber);
-    
-    // Display the newly rendered page (thread-safe)
+
     {
         QMutexLocker locker(&pdfCacheMutex);
         if (pdfCache.contains(pageNumber)) {
             backgroundImage = *pdfCache.object(pageNumber);
         } else {
-            backgroundImage = QPixmap();  // Clear background if rendering failed
+            backgroundImage = QPixmap();
         }
     }
-    
-    loadPage(pageNumber);  // Load existing canvas annotations
-    loadPdfTextBoxes(pageNumber); // Load text boxes for PDF text selection
+
+    loadPage(pageNumber);
+    loadPdfTextBoxes(pageNumber);
     update();
-    
-    // Cache adjacent pages after delay
+
     checkAndCacheAdjacentPages(pageNumber);
+#else
+    Q_UNUSED(pageNumber);
+    backgroundImage = QPixmap();
+    update();
+#endif
 }
 
 
 void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
+#if SPEEDYNOTE_ENABLE_POPPLER
     if (!pdfDocument || pageNumber < 0 || pageNumber >= pdfDocument->numPages()) return;
 
     QFutureWatcher<QPixmap> *watcher = new QFutureWatcher<QPixmap>(this);
@@ -456,6 +484,9 @@ void InkCanvas::loadPdfPreviewAsync(int pageNumber) {
     });
 
     watcher->setFuture(future);
+#else
+    Q_UNUSED(pageNumber);
+#endif
 }
 
 
@@ -720,6 +751,7 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
     }
     
     // Draw PDF text selection overlay on top of everything
+#if SPEEDYNOTE_ENABLE_POPPLER
     if (pdfTextSelectionEnabled && isPdfLoaded) {
         painter.save(); // Save painter state for PDF text overlay
         painter.resetTransform(); // Reset transform to draw directly in logical widget coordinates
@@ -773,6 +805,8 @@ void InkCanvas::paintEvent(QPaintEvent *event) {
         
         painter.restore(); // Restore painter state
     }
+#else
+#endif
     
     // ✅ PERFORMANCE: Draw outline preview during picture movement (on top of everything)
     if (!picturePreviewRect.isEmpty() && (pictureDragging || pictureResizing)) {
@@ -2242,10 +2276,12 @@ void InkCanvas::deletePage(int pageNumber) {
         pictureManager->deleteWindowsForPage(pageNumber);
     }
 
-    if (pdfDocument){
+    #if SPEEDYNOTE_ENABLE_POPPLER
+    if (pdfDocument) {
         loadPdfPage(pageNumber);
-    }
-    else{
+    } else
+    #endif
+    {
         loadPage(pageNumber);
     }
 
@@ -2815,6 +2851,7 @@ void InkCanvas::copyRopeSelectionToClipboard() {
 }
 
 // PDF text selection implementation
+#if SPEEDYNOTE_ENABLE_POPPLER
 void InkCanvas::clearPdfTextSelection() {
     // Clear selection state
     selectedTextBoxes.clear();
@@ -3452,6 +3489,61 @@ void InkCanvas::cacheAdjacentPages() {
         watcher->setFuture(future);
     }
 }
+
+#else  // SPEEDYNOTE_ENABLE_POPPLER
+
+void InkCanvas::clearPdfTextSelection() {
+    pdfTextSelecting = false;
+    if (pdfTextSelectionTimer && pdfTextSelectionTimer->isActive()) {
+        pdfTextSelectionTimer->stop();
+    }
+    hasPendingSelection = false;
+    update();
+}
+
+QString InkCanvas::getSelectedPdfText() const {
+    return QString();
+}
+
+void InkCanvas::loadPdfTextBoxes(int) {}
+
+void InkCanvas::loadPdfTextBoxesForSinglePage(int) {}
+
+void InkCanvas::loadPdfTextBoxesForCombinedCanvas(int, int) {}
+
+QPointF InkCanvas::mapWidgetToPdfCoordinates(const QPointF &) {
+    return QPointF();
+}
+
+QPointF InkCanvas::mapPdfToWidgetCoordinates(const QPointF &, int) {
+    return QPointF();
+}
+
+void InkCanvas::updatePdfTextSelection(const QPointF &, const QPointF &) {}
+
+void InkCanvas::updatePdfTextSelectionPreview(const QPointF &, const QPointF &) {}
+
+void InkCanvas::updatePdfHoverHighlight(const QPointF &) {}
+
+void InkCanvas::handlePdfLinkClick(const QPointF &) {}
+
+void InkCanvas::showPdfTextSelectionMenu(const QPoint &) {}
+
+void InkCanvas::processPendingTextSelection() {
+    hasPendingSelection = false;
+}
+
+bool InkCanvas::isValidPageNumber(int pageNumber) const {
+    return (pageNumber >= 0 && pageNumber < totalPdfPages);
+}
+
+void InkCanvas::renderPdfPageToCache(int) {}
+
+void InkCanvas::checkAndCacheAdjacentPages(int) {}
+
+void InkCanvas::cacheAdjacentPages() {}
+
+#endif // SPEEDYNOTE_ENABLE_POPPLER
 
 // Intelligent Note Cache System Implementation
 
@@ -4692,8 +4784,3 @@ int InkCanvas::getAutoscrollThreshold() const {
     
     return singlePageHeight;
 }
-
-
-
-
-

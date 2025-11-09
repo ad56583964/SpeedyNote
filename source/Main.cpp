@@ -15,6 +15,10 @@
 #include "SpnPackageManager.h"
 #include "InkCanvas.h" // For BackgroundStyle enum
 
+#ifndef SPEEDYNOTE_ENABLE_SDL
+#define SPEEDYNOTE_ENABLE_SDL 1
+#endif
+
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <shlobj.h>
@@ -35,9 +39,11 @@ int main(int argc, char *argv[]) {
     
     
 #endif
+    #if SPEEDYNOTE_ENABLE_SDL
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI, "1");
     SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_SWITCH, "1");
     SDL_Init(SDL_INIT_GAMECONTROLLER | SDL_INIT_JOYSTICK);
+    #endif
 
     /*
     qDebug() << "SDL2 version:" << SDL_GetRevision();
