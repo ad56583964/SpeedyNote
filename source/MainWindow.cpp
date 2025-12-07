@@ -6542,6 +6542,9 @@ void MainWindow::createNewSpnPackage(const QString &spnPath)
 
 bool MainWindow::isInstanceRunning()
 {
+#ifdef Q_OS_ANDROID
+    return false;
+#endif
     if (!sharedMemory) {
         sharedMemory = new QSharedMemory("SpeedyNote_SingleInstance");
     }

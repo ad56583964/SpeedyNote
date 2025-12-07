@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.10)
 cmake_policy(SET CMP0074 NEW)
 
 project(NoteApp)
@@ -305,6 +305,14 @@ elseif (ANDROID)
         target_link_directories(NoteApp PRIVATE ${ANDROID_POPPLER_LIBRARY_DIRS})
         target_link_options(NoteApp PRIVATE ${ANDROID_POPPLER_LINK_FLAGS})
         target_link_libraries(NoteApp PRIVATE ${ANDROID_POPPLER_STATIC_LIBS})
+        target_link_libraries(NoteApp PRIVATE
+                lcms::lcms
+                libjpeg-turbo::libjpeg-turbo
+                TIFF::TIFF
+                Freetype::Freetype
+                PNG::PNG
+                ZLIB::ZLIB
+                openjp2)
     endif()
 elseif (UNIX)
     target_link_libraries(NoteApp PRIVATE
